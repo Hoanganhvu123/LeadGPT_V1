@@ -2,6 +2,7 @@ import os
 from typing import Dict, Any
 import json
 from pprint import pprint
+import asyncio
 
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain.agents.agent import AgentExecutor
@@ -17,7 +18,7 @@ from leadgpt.agent.excutor import CustomAgentExecutor
 from leadgpt.agent.create_lead_agent import create_lead_agent
 from leadgpt.agent.result_parser import parse_agent_result
 
-class LeadGPT:
+class LeadGPTAPI:
     def __init__(self, llm, verbose=False, **kwargs):
         self.llm = llm
         self.verbose = verbose
@@ -44,18 +45,17 @@ class LeadGPT:
         self.company_values = kwargs.get("company_values", "company_values")
         self.conversation_purpose = kwargs.get("conversation_purpose", "conversation_purpose")
         self.conversation_type = kwargs.get("conversation_type", "conversation_type")
-        self.languages = kwargs.get("languages", "Vietnamese")  # Đổi "language" thành "languages"
+        self.languages = kwargs.get("languages", "Vietnamese")
         self.customer_info = {"name": "Valued Customer"}
         
-        # Thêm dòng này để khởi tạo customer_info
         self.customer_information = {"name": "Valued Customer"}
         
     @property
     def current_stage(self):
         return LEAD_CONVERSATION_STAGES.get(self.current_stage_id)
      
-    def determine_conversation_stage(self):   
-        stage_analyzer_output = self.stage_analyzer_assistant.invoke(   
+    async def determine_conversation_stage(self):   
+        stage_analyzer_output = await self.stage_analyzer_assistant.ainvoke(   
             input={
                 "current_stage": self.current_stage,
                 "conversation_history": self.chat_memory.messages[-6:],
@@ -70,8 +70,8 @@ class LeadGPT:
         print(f"Current Conversation Stage: {self.current_conversation_stage}")
         return self.current_conversation_stage
 
-    def human_step(self) -> str:
-        self.human_input = input("User: ")
+    def human_step(self, message: str):
+        self.human_input = message
         self.chat_memory.add_user_message(self.human_input)
 
     def _prepare_inputs(self) -> Dict[str, Any]:
@@ -84,7 +84,7 @@ class LeadGPT:
             "product_catalog": self.product_catalog,
             "conversation_purpose": self.conversation_purpose,
             "conversation_type": self.conversation_type,
-            "languages": self.languages,  # Đổi "language" thành "languages"
+            "languages": self.languages,
             "input": self.human_input,
             "conversation_history": "\n".join(f"{msg.type}: {msg.content}" for msg in self.chat_memory.messages[-6:]),
             "customer_information": self.lead_summary_memory.buffer,
@@ -94,7 +94,31 @@ class LeadGPT:
  
     async def agent_step(self):
         inputs = self._prepare_inputs()
-        prompt = CustomPromptTemplate(
+        
+        # Tạo prompt và agent có thể chạy đồng thời
+        prompt_task = asyncio.create_task(self._create_prompt())
+        agent_task = asyncio.create_task(self._create_agent())
+        
+        prompt, self.runable_lead_agent = await asyncio.gather(prompt_task, agent_task)
+        
+        lead_agent = CustomAgentExecutor(
+            agent=self.runable_lead_agent,
+            tools=self.tools,
+            verbose=self.verbose,
+            max_iterations=3,
+            return_intermediate_steps=True,
+            handle_parsing_errors=True
+        )
+        
+        result = await lead_agent.ainvoke(inputs)  # Sử dụng phương thức bất đồng bộ
+        
+        self.chat_memory.add_ai_message(result.get("output"))
+        
+        parsed_result = parse_agent_result(json.dumps(result))
+        return parsed_result
+
+    async def _create_prompt(self):
+        return CustomPromptTemplate(
             template=LEAD_AGENT_PROMPT,
             tools_getter=lambda x: self.tools,
             input_variables=[
@@ -112,30 +136,17 @@ class LeadGPT:
                 "conversation_history",
                 "customer_information",
                 "current_stage",
-                "customer_info_name"  # Thêm dòng này
+                "customer_info_name"
             ],
         )
-        self.runable_lead_agent = create_lead_agent(self.llm, self.tools, prompt)   
-        lead_agent = CustomAgentExecutor(
-            agent=self.runable_lead_agent,
-            tools=self.tools,
-            verbose=self.verbose,
-            max_iterations=3,
-            return_intermediate_steps=True,
-            handle_parsing_errors=True
-        )
-        result = lead_agent.invoke(inputs)
-        self.chat_memory.add_ai_message(result.get("output"))
-        
-        parsed_result = parse_agent_result(json.dumps(result))
-        print(parsed_result)
-        return parsed_result
+
+    async def _create_agent(self):
+        return create_lead_agent(self.llm, self.tools, await self._create_prompt())
     
-    
-    async def update_customer_infor(self):
+    async def update_customer_info(self):
         """Update the customer information based on summary memory usage"""
         print(f"\nPrevious_summary: {self.lead_summary_memory.buffer}\n")
-        self.lead_summary_memory.buffer = self.lead_summary_memory.predict_new_summary(
+        self.lead_summary_memory.buffer = await self.lead_summary_memory.apredict_new_summary(
             self.chat_memory.messages[-4:],
             self.lead_summary_memory.buffer
         )                                                                                                                                          

@@ -106,3 +106,7 @@ def product_search_tool(input: str) -> Union[List[Dict], str]:
     except Exception as e:
         return f"An error occurred: {str(e)}"
 
+if __name__ == "__main__":
+    # In ra tool name và tool description
+    print("Tool Name:", product_search_tool.name)
+    print("Tool Description:", product_search_tool.description)

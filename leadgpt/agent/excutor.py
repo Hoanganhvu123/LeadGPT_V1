@@ -1,96 +1,119 @@
-import json
-import re
-from typing import Any, Dict, List, Optional
+# Corrected import statements
+import inspect
+from typing import Any, Dict, Optional, List
+
+# Corrected import path for RunnableConfig
 from langchain.agents import AgentExecutor
-from langchain.schema import AgentAction, AgentFinish
-from langchain.callbacks.manager import CallbackManagerForChainRun
-import time
+from langchain.callbacks.manager import CallbackManager
+from langchain.chains.base import Chain
+from langchain_core.load.dump import dumpd
+from langchain_core.outputs import RunInfo
+from langchain_core.runnables import RunnableConfig, ensure_config
+
 
 class CustomAgentExecutor(AgentExecutor):
-    def _parse_llm_output(self, llm_output: str) -> Dict[str, Any]:
-        """Parse the LLM output and extract the JSON content."""
-        try:
-            # Tìm và trích xuất nội dung JSON từ đầu ra của LLM
-            json_match = re.search(r'```json\n(.*?)\n```', llm_output, re.DOTALL)
-            if json_match:
-                json_content = json_match.group(1)
-                return json.loads(json_content)
-            else:
-                raise ValueError("No JSON content found in LLM output")
-        except json.JSONDecodeError:
-            raise ValueError("Invalid JSON in LLM output")
-
-    def _take_next_step(
+    def invoke(
         self,
-        name_to_tool_map: Dict[str, Any],
-        inputs: Dict[str, str],
-        intermediate_steps: List[tuple[AgentAction, str]],
-        run_manager: Optional[CallbackManagerForChainRun] = None,
+        input: Dict[str, Any],
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
-        """Take a single step in the thought-action-observation loop."""
+        intermediate_steps = []  # Initialize the list to capture intermediate steps
+
+        # Ensure the configuration is set up correctly
+        config = ensure_config(config)
+        callbacks = config.get("callbacks")
+        tags = config.get("tags")
+        metadata = config.get("metadata")
+        run_name = config.get("run_name")
+        include_run_info = kwargs.get("include_run_info", False)
+        return_only_outputs = kwargs.get("return_only_outputs", False)
+
+        # Prepare inputs based on the provided input
+        inputs = self.prep_inputs(input)
+        callback_manager = CallbackManager.configure(
+            callbacks,
+            self.callbacks,
+            self.verbose,
+            tags,
+            self.tags,
+            metadata,
+            self.metadata,
+        )
+
+        # Check if the _call method supports the new argument 'run_manager'
+        new_arg_supported = inspect.signature(self._call).parameters.get("run_manager")
+        run_manager = callback_manager.on_chain_start(
+            dumpd(self),
+            inputs,
+            name=run_name,
+        )
+
         try:
-            # Get action from agent
-            llm_output = self.agent.plan(
-                intermediate_steps,
-                **inputs,
-                run_manager=run_manager,
+            # Execute the _call method, passing 'run_manager' if supported
+            outputs = (
+                self._call(inputs, run_manager=run_manager)
+                if new_arg_supported
+                else self._call(inputs)
             )
-            
-            # Parse LLM output
-            parsed_output = self._parse_llm_output(llm_output)
-            
-            # Log the tool usage
-            if parsed_output.get('tool'):
-                print(f"Tool used: {parsed_output['tool']}")
-                print(f"Tool input: {parsed_output['tool_input']}")
-                
-                # Execute the tool
-                tool = name_to_tool_map[parsed_output['tool']]
-                tool_output = tool(parsed_output['tool_input'])
-                
-                # Update the parsed output with the tool's result
-                parsed_output['action_output'] = tool_output
-            
-            return parsed_output
-            
-        except Exception as e:
-            # Handle any unexpected errors
-            return {
-                "conversational_stage": "Error",
-                "tool": None,
-                "tool_input": None,
-                "action_output": None,
-                "action_input": None,
-                "response": f"An error occurred: {str(e)}. Let's try to continue our conversation."
-            }
+            # Capture all intermediate steps
+            if "intermediate_steps" in outputs:
+                for step in outputs["intermediate_steps"]:
+                    if isinstance(step, tuple) and len(step) == 2:
+                        action, observation = step
+                        intermediate_steps.append({
+                            "thought": action.log,
+                            "action": action.tool,
+                            "action_input": action.tool_input,
+                            "observation": observation
+                        })
+                    else:
+                        intermediate_steps.append(step)
+        except BaseException as e:
+            # Handle errors and capture them as intermediate steps
+            run_manager.on_chain_error(e)
+            intermediate_steps.append({"event": "Error", "error": str(e)})
+            raise e
+        finally:
+            # Mark the end of the chain execution
+            run_manager.on_chain_end(outputs)
 
-    def _call(self, inputs: Dict[str, str]) -> Dict[str, Any]:
-        """Run text through and get agent response."""
-        name_to_tool_map = {tool.name: tool for tool in self.tools}
-        intermediate_steps: List[tuple[AgentAction, str]] = []
-        start_time = time.time()
-        iterations = 0
-        
-        while self._should_continue(iterations, time.time() - start_time):
-            step_output = self._take_next_step(
-                name_to_tool_map,
-                inputs,
-                intermediate_steps,
-            )
-            
-            # Return the formatted agent result
-            return step_output
-            
-        # If we get here, we've exceeded the max iterations or time limit
-        return {
-            "conversational_stage": "Max Iterations or Time Limit Reached",
-            "tool": None,
-            "tool_input": None,
-            "action_output": None,
-            "action_input": None,
-            "response": "I apologize, but I've reached the maximum number of steps or time limit. Let me summarize our conversation so far."
-        }
+        # Prepare the final outputs, including run information if requested
+        final_outputs: Dict[str, Any] = self.prep_outputs(
+            inputs, outputs, return_only_outputs
+        )
+        if include_run_info:
+            final_outputs["run_info"] = RunInfo(run_id=run_manager.run_id)
 
-    def invoke(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Run the agent."""
-        return self._call(inputs)
+        # Include intermediate steps in the final outputs
+        final_outputs["intermediate_steps"] = intermediate_steps
+
+        # Format the log to string
+        log_string = self._format_log_to_string(intermediate_steps)
+        final_outputs["log"] = log_string
+
+        return final_outputs
+
+    def _format_log_to_string(self, intermediate_steps: List[Dict[str, Any]]) -> str:
+        log_string = "> Entering new CustomAgentExecutor chain...\n"
+        for step in intermediate_steps:
+            if "thought" in step:
+                log_string += f"Thought: {step['thought']}\n"
+            if "action" in step:
+                log_string += f"Action: {step['action']}\n"
+            if "action_input" in step:
+                log_string += f"Action Input: {step['action_input']}\n"
+            if "observation" in step:
+                log_string += f"Observation: {step['observation']}\n"
+            if "output" in step:
+                log_string += f"{step['output']}\n"
+            # Add this else block to handle any other type of step
+            for key, value in step.items():
+                if key not in ["thought", "action", "action_input", "observation", "output"]:
+                    log_string += f"{key}: {value}\n"
+        log_string += "> Finished chain.\n"
+        return log_string
+
+
+if __name__ == "__main__":
+    agent = CustomAgentExecutor()

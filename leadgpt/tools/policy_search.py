@@ -67,3 +67,9 @@ def policy_search_tool(query: str) -> List[str]:
 
     results = vector_store_manager.vectorstore.similarity_search(query, k=5)
     return [doc.page_content for doc in results]
+
+
+# if __name__ == "__main__":
+#     # In ra tool name và tool description
+#     print("Tool Name:", policy_search_tool.name)
+#     print("Tool Description:", policy_search_tool.description)
