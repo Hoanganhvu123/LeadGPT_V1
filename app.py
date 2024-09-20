@@ -1,10 +1,12 @@
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_google_genai import ChatGoogleGenerativeAI
-from leadgpt.agent.lead_agent_api import LeadGPTAPI
+from leadgpt.agent.lead_agent import LeadGPT
 import json
+from langchain_groq import ChatGroq
 
 # Load environment variables
 load_dotenv()
@@ -12,10 +14,20 @@ load_dotenv()
 # Initialize FastAPI app
 app = FastAPI()
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Initialize LeadGPT
 llm = ChatGoogleGenerativeAI(temperature=0, model="gemini-1.5-flash")
-lead = LeadGPTAPI(
-    llm=llm,
+llm_groq = ChatGroq(temperature=0.3, model="llama-3.1-70b-versatile")
+lead = LeadGPT(
+    llm=llm_groq,
     verbose=True,
     lead_name="DaisyBot",
     lead_role="Sales Assistant",
@@ -36,11 +48,9 @@ class Message(BaseModel):
 async def chat(message: Message):
     try:
         lead.human_step(message.content)
-        response = await lead.agent_step()
-        print("Raw response from agent:", response) 
+        response = lead.agent_step()
         # Parse the JSON response
-        parsed_response = json.loads(response)
-        return {"response": parsed_response}
+        return {"response": response}
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Invalid JSON response from agent")
     except Exception as e:

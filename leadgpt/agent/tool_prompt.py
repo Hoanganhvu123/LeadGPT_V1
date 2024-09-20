@@ -44,3 +44,5 @@ class CustomPromptTemplate(StringPromptTemplate):
             var.split("}")[0] for var in self.template.split("{") 
             if "}" in var and var.split("}")[0] not in special_vars
         ]
+        
+        

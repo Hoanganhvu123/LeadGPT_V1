@@ -22,15 +22,14 @@ class LeadGPT:
         self.llm = llm
         self.verbose = verbose
         
-        self.current_stage_id = None 
-        self.current_conversation_stage = self.current_stage
+        self.current_stage_id = "1"  # Giữ nguyên là chuỗi
         self.stage_analyzer_assistant = StageAnalyzerAssistant.from_llm(llm, verbose=verbose)
         
         self.chat_memory = ChatMessageHistory()
         self.human_chat_memory = []
         self.human_input = ""
         self.tools = [product_search_tool, policy_search_tool]  
-        self.lead_summary_memory = LeadSummaryMemory.from_messages(
+        self.lead_summary_memory = LeadSummaryMemory(
             llm=llm, 
             chat_memory=self.chat_memory,
             verbose=verbose
@@ -44,35 +43,46 @@ class LeadGPT:
         self.company_values = kwargs.get("company_values", "company_values")
         self.conversation_purpose = kwargs.get("conversation_purpose", "conversation_purpose")
         self.conversation_type = kwargs.get("conversation_type", "conversation_type")
-        self.languages = kwargs.get("languages", "Vietnamese")  # Đổi "language" thành "languages"
-        self.customer_info = {"name": "Valued Customer"}
+        self.languages = kwargs.get("languages", "Vietnamese")
+        self.customer_info = None
         
-        # Thêm dòng này để khởi tạo customer_info
-        self.customer_information = {"name": "Valued Customer"}
         
     @property
-    def current_stage(self):
-        return LEAD_CONVERSATION_STAGES.get(self.current_stage_id)
-     
+    def current_conversation_stage(self):
+        return LEAD_CONVERSATION_STAGES[self.current_stage_id.strip()]
+
+
+    def human_step(self, message: str):
+        self.human_input = message
+        self.chat_memory.add_user_message(self.human_input)
+        
+        
     def determine_conversation_stage(self):   
         stage_analyzer_output = self.stage_analyzer_assistant.invoke(   
             input={
-                "current_stage": self.current_stage,
-                "conversation_history": self.chat_memory.messages[-6:],
+                "current_conversation_stage": self.current_conversation_stage,
+                "conversation_history": self.chat_memory.messages[-10:],
                 "current_stage_id": self.current_stage_id,
                 "customer_information": self.lead_summary_memory.buffer
             },
-            return_only_outputs=False,
+            return_only_outputs=True,
         )
-        self.current_stage_id = stage_analyzer_output.get("text")
-        print(f"Current Stage ID: {self.current_stage_id}")
-        self.current_conversation_stage = self.current_stage
-        print(f"Current Conversation Stage: {self.current_conversation_stage}")
+        self.current_stage_id = stage_analyzer_output.get("text", "1").strip()  
+        print(f"Current Conversation Stage: {self.current_stage_id} : {self.current_conversation_stage}")
         return self.current_conversation_stage
+    
+    def update_customer_info(self):
+        """Update the customer information based on recent conversation"""
+        print(f"\nPrevious customer info: {self.customer_info}\n")
+        new_info = self.lead_summary_memory.predict_new_summary(
+            input={
+                "customer_info": self.customer_info,
+                "new_lines": [msg.content for msg in self.chat_memory.messages if msg.type == "human"][-4:]
+            }
+        )
+        self.customer_info = new_info
+        print(f"Updated customer info: {self.customer_info}\n")
 
-    def human_step(self) -> str:
-        self.human_input = input("User: ")
-        self.chat_memory.add_user_message(self.human_input)
 
     def _prepare_inputs(self) -> Dict[str, Any]:
         return {
@@ -88,11 +98,11 @@ class LeadGPT:
             "input": self.human_input,
             "conversation_history": "\n".join(f"{msg.type}: {msg.content}" for msg in self.chat_memory.messages[-6:]),
             "customer_information": self.lead_summary_memory.buffer,
-            "current_stage": self.current_conversation_stage,
-            "customer_info_name": self.customer_info.get("name", "Valued Customer")
+            "current_conversation_stage": self.current_conversation_stage,
+            "customer_info_name": self.customer_info
         }
  
-    async def agent_step(self):
+    def agent_step(self):
         inputs = self._prepare_inputs()
         prompt = CustomPromptTemplate(
             template=LEAD_AGENT_PROMPT,
@@ -111,8 +121,8 @@ class LeadGPT:
                 "languages",
                 "conversation_history",
                 "customer_information",
-                "current_stage",
-                "customer_info_name"  # Thêm dòng này
+                "current_conversation_stage",
+                "customer_info_name" 
             ],
         )
         self.runable_lead_agent = create_lead_agent(self.llm, self.tools, prompt)   
@@ -127,16 +137,9 @@ class LeadGPT:
         result = lead_agent.invoke(inputs)
         self.chat_memory.add_ai_message(result.get("output"))
         
-        parsed_result = parse_agent_result(json.dumps(result))
+        parsed_result = parse_agent_result(result, self.customer_info, self.current_stage_id, self.current_conversation_stage)
         print(parsed_result)
         return parsed_result
+
     
     
-    async def update_customer_infor(self):
-        """Update the customer information based on summary memory usage"""
-        print(f"\nPrevious_summary: {self.lead_summary_memory.buffer}\n")
-        self.lead_summary_memory.buffer = self.lead_summary_memory.predict_new_summary(
-            self.chat_memory.messages[-4:],
-            self.lead_summary_memory.buffer
-        )                                                                                                                                          
-        print(f"Current Summary: {self.lead_summary_memory.buffer}\n")

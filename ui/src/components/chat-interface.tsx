@@ -11,28 +11,24 @@ type Message = {
   id: string;
   text: string;
   sender: 'user' | 'bot';
-  thinkingProcess?: {
-    conversationalStage: string,
-    useTools: boolean,
-    tool?: string,
-    toolInput?: string,
-    actionOutput?: string,
-    actionInput?: string
-  };
 };
 
 type ThinkingProcess = {
-  conversationalStage: string,
-  tool?: string,
-  toolInput?: string,
-  actionOutput?: string,
-  actionInput?: string
+  current_stage_id: string;
+  current_conversation_stage: string;
+  customer_information: string | null;
+  thoughts: string[];
+  actions: string[];
+  action_inputs: string[];
+  observations: string[];
+  final_thought: string;
+  final_response: string;
 };
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [thinkingProcess, setThinkingProcess] = useState<ThinkingProcess[]>([]);
+  const [thinkingProcess, setThinkingProcess] = useState<ThinkingProcess | null>(null);
   const [maxHeight, setMaxHeight] = useState('80vh');
   const [isBotTyping, setIsBotTyping] = useState(false);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
@@ -78,22 +74,24 @@ export function ChatInterface() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ human_say: userMessage }),
+        body: JSON.stringify({ content: userMessage }),
       });
 
       if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
 
       const data = await response.json();
-      setThinkingProcess(prev => [...prev, {
-        conversationalStage: data.conversational_stage,
-        tool: data.tool,
-        toolInput: data.tool_input,
-        actionOutput: data.action_output,
-        actionInput: data.action_input
-      }]);
-      setMessages(prev => [...prev, { id: uuidv4(), text: data.response, sender: 'bot' }]);
+      console.log('Bot response data:', data);
+      if (data && data.response) {
+        const parsedResponse = JSON.parse(data.response);
+        setThinkingProcess(parsedResponse);
+        setMessages(prev => [...prev, { id: uuidv4(), text: parsedResponse.final_response, sender: 'bot' }]);
+      } else {
+        console.error("Unexpected response format:", data);
+        throw new Error("Unexpected response format");
+      }
     } catch (error) {
       console.error("Failed to fetch bot's response:", error);
+      setMessages(prev => [...prev, { id: uuidv4(), text: "Sorry, there was an error processing your request.", sender: 'bot' }]);
     } finally {
       setIsBotTyping(false);
       setBotHasResponded(true);
@@ -131,16 +129,58 @@ export function ChatInterface() {
     </div>
   );
 
-  const renderThinkingProcess = (process: ThinkingProcess, index: number) => (
-    <div key={index} className="break-words my-2">
-      <div><strong>({index + 1})</strong></div>
-      <div><strong>Conversational Stage:</strong> {process.conversationalStage}</div>
-      {process.tool && <div><strong>Tool:</strong> {process.tool}</div>}
-      {process.toolInput && <div><strong>Tool Input:</strong> {process.toolInput}</div>}
-      {process.actionInput && <div><strong>Action Input:</strong> {process.actionInput}</div>}
-      {process.actionOutput && <div><strong>Action Output:</strong> {process.actionOutput}</div>}
-    </div>
-  );
+  const renderThinkingProcess = () => {
+    if (!thinkingProcess) return null;
+    return (
+      <div className="break-words my-2">
+        <div><strong>Current Stage ID:</strong> {thinkingProcess.current_stage_id}</div>
+        <div><strong>Current Conversation Stage:</strong> {thinkingProcess.current_conversation_stage}</div>
+        <div><strong>Customer Information:</strong> {thinkingProcess.customer_information || 'Not available'}</div>
+        {thinkingProcess.thoughts && thinkingProcess.thoughts.length > 0 && (
+          <div>
+            <strong>Thoughts:</strong>
+            <ul>
+              {thinkingProcess.thoughts.map((thought, index) => (
+                <li key={index}>{thought}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {thinkingProcess.actions && thinkingProcess.actions.length > 0 && (
+          <div>
+            <strong>Actions:</strong>
+            <ul>
+              {thinkingProcess.actions.map((action, index) => (
+                <li key={index}>{action}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {thinkingProcess.action_inputs && thinkingProcess.action_inputs.length > 0 && (
+          <div>
+            <strong>Action Inputs:</strong>
+            <ul>
+              {thinkingProcess.action_inputs.map((input, index) => (
+                <li key={index}>{input}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {thinkingProcess.observations && thinkingProcess.observations.length > 0 && (
+          <div>
+            <strong>Observations:</strong>
+            <ul>
+              {thinkingProcess.observations.map((observation, index) => (
+                <li key={index}>{observation}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div><strong>Final Thought:</strong> {thinkingProcess.final_thought}</div>
+        <div><strong>Final Response:</strong> {thinkingProcess.final_response}</div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col" style={{ height: '89vh' }}>
@@ -184,7 +224,7 @@ export function ChatInterface() {
             <h2 className="text-lg font-semibold">AI Lead Agent Thought Process</h2>
           </div>
           <div className={`flex-1 overflow-y-auto hide-scroll ${styles.hideScrollbar}`} style={{ overflowX: 'hidden' }}>
-            {thinkingProcess.map(renderThinkingProcess)}
+            {renderThinkingProcess()}
             <div ref={thinkingProcessEndRef} />
           </div>
         </div>

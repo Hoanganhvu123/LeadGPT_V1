@@ -75,13 +75,29 @@ class ProductDataLoader:
 @tool
 def product_search_tool(input: str) -> Union[List[Dict], str]:
     """
-    Tìm kiếm thông tin liên quan tới sản phẩm và trả về các thông tin liên quan sử dụng SQLite.
+    Search for product information and return relevant details using SQLite.
+
+    The 'products' table in the database contains the following columns:
+    - product_code: A unique identifier for each product (TEXT)
+    - product_name: The name of the product (TEXT)
+    - material: The material composition of the product (TEXT)
+    - size: The available sizes of the product (TEXT)
+    - color: The available colors of the product (TEXT)
+    - brand: The brand that manufactures or sells the product (TEXT)
+    - gender: The target gender for the product (e.g., male, female, unisex) (TEXT)
+    - stock_quantity: The quantity of the product available in stock (INTEGER)
+    - price: The price of the product (REAL)
 
     Args:
-        input (str): Chuỗi tìm kiếm để tìm các sản phẩm.
+        input (str): The search string to find products.
 
     Returns:
-        Union[List[Dict], str]: Kết quả tìm kiếm dưới dạng danh sách từ điển hoặc thông báo lỗi nếu có.
+        Union[List[Dict], str]: Search results as a list of dictionaries or an error message if applicable.
+
+    Note:
+    - The agent must not fabricate or make up any information.
+    - Product recommendations should be based solely on the available fields in the database.
+    - Customer needs assessment should only consider the information provided in these fields.
     """
     try:
         llm = ChatGoogleGenerativeAI(temperature=0, model="gemini-1.5-flash", google_api_key=GOOGLE_API_KEY)
@@ -106,7 +122,7 @@ def product_search_tool(input: str) -> Union[List[Dict], str]:
     except Exception as e:
         return f"An error occurred: {str(e)}"
 
-if __name__ == "__main__":
-    # In ra tool name và tool description
-    print("Tool Name:", product_search_tool.name)
-    print("Tool Description:", product_search_tool.description)
+# if __name__ == "__main__":
+#     # In ra tool name và tool description
+#     print("Tool Name:", product_search_tool.name)
+#     print("Tool Description:", product_search_tool.description)

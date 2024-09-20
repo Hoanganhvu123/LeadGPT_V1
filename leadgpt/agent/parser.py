@@ -7,8 +7,8 @@ from langchain.schema import AgentAction, AgentFinish  # OutputParserException
 
 
 class LeadConvoOutputParser(AgentOutputParser):
-    ai_prefix: str = "AI"  # change for lead_agent_name
-    verbose: bool = False
+    ai_prefix: str = "AI"  
+    verbose: bool = True
 
     def get_format_instructions(self) -> str:
         return FORMAT_INSTRUCTIONS
