@@ -2,7 +2,7 @@
 
 LeadGPT is an advanced AI assistant system designed to support the sales process and customer interactions. Using natural language processing and machine learning technologies, LeadGPT generates natural and effective conversations with potential customers.
 
-![LeadGPT Product Image](public/image.png)
+![alt text](image.png)
 
 ## Key Features
 
