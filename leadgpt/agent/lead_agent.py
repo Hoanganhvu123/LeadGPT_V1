@@ -16,6 +16,7 @@ from leadgpt.agent.tool_prompt import CustomPromptTemplate
 from leadgpt.agent.excutor import CustomAgentExecutor
 from leadgpt.agent.create_lead_agent import create_lead_agent
 from leadgpt.agent.result_parser import parse_agent_result
+from langchain.agents import create_react_agent
 
 class LeadGPT:
     def __init__(self, llm, verbose=False, **kwargs):
@@ -68,12 +69,12 @@ class LeadGPT:
             return_only_outputs=True,
         )
         self.current_stage_id = stage_analyzer_output.get("text", "1").strip()  
-        print(f"Current Conversation Stage: {self.current_stage_id} : {self.current_conversation_stage}")
+        # print(f"Current Conversation Stage: {self.current_stage_id} : {self.current_conversation_stage}")
         return self.current_conversation_stage
     
     def update_customer_info(self):
         """Update the customer information based on recent conversation"""
-        print(f"\nPrevious customer info: {self.customer_info}\n")
+        # print(f"\nPrevious customer info: {self.customer_info}\n")
         new_info = self.lead_summary_memory.predict_new_summary(
             input={
                 "customer_info": self.customer_info,
@@ -81,7 +82,7 @@ class LeadGPT:
             }
         )
         self.customer_info = new_info
-        print(f"Updated customer info: {self.customer_info}\n")
+        # print(f"Updated customer info: {self.customer_info}\n")
 
 
     def _prepare_inputs(self) -> Dict[str, Any]:
@@ -125,13 +126,13 @@ class LeadGPT:
                 "customer_info_name" 
             ],
         )
-        self.runable_lead_agent = create_lead_agent(self.llm, self.tools, prompt)   
+        self.runable_lead_agent = create_lead_agent(self.llm, prompt)   
         lead_agent = CustomAgentExecutor(
             agent=self.runable_lead_agent,
             tools=self.tools,
             verbose=self.verbose,
             max_iterations=3,
-            return_intermediate_steps=True,
+            return_intermediate_steps=True, 
             handle_parsing_errors=True
         )
         result = lead_agent.invoke(inputs)

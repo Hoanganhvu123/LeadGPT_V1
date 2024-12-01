@@ -43,9 +43,9 @@ def format_lead_log_to_string(intermediate_steps: List[Union[Dict[str, Any], Tup
             log_string += f"Action Input: {action.tool_input}\n"
             log_string += f"Observation: {observation}\n"
     log_string += "> Finished chain.\n"
-    print("------------------------")
-    print()  # Thêm một dòng trống
-    print("Full log: ", log_string)
-    print()
+    # print("------------------------")
+    # print()  # Thêm một dòng trống
+    # print("Full log: ", log_string)
+    # print()
     return log_string
 

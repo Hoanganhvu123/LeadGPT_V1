@@ -48,6 +48,8 @@ class Message(BaseModel):
 async def chat(message: Message):
     try:
         lead.human_step(message.content)
+        lead.determine_conversation_stage()
+        lead.update_customer_info()
         response = lead.agent_step()
         # Parse the JSON response
         return {"response": response}

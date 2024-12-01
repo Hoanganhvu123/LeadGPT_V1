@@ -15,9 +15,10 @@ class LeadConvoOutputParser(AgentOutputParser):
 
     def parse(self, text: str) -> Union[AgentAction, AgentFinish]:
         if self.verbose:
-            print("TEXT")
-            print(text)
-            print("-------")
+            # print("TEXT")
+            # print(text)
+            # print("-------")
+            print()
         regex = r"Action: (.*?)[\n]*Action Input: (.*)"
         match = re.search(regex, text)
         if not match:

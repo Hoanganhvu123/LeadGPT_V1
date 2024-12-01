@@ -13,7 +13,6 @@ from leadgpt.agent.format_log import format_lead_log_to_string
 
 def create_lead_agent(
     llm: BaseLanguageModel,
-    tools: Sequence[BaseTool],
     prompt: BasePromptTemplate,
     *,
     stop_sequence: Union[bool, List[str]] = True,

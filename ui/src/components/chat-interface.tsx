@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Input } from "@/components/ui/input";
-import BotIcon from '@/components/ui/bot-icon';
 import LoaderIcon from '@/components/ui/loader-icon';
 import styles from './ChatInterface.module.css';
 import ReactMarkdown from 'react-markdown';
@@ -110,7 +109,7 @@ export function ChatInterface() {
       ) : (
         <div className="flex w-full justify-between">
           <div className="flex items-center">
-            <img alt="Bot" className="rounded-full mr-2" src="/maskot.png" style={{ width: 24, height: 24, objectFit: "cover" }} />
+            <span role="img" aria-label="Bot" className="mr-2">🌼</span>
             <span className="text-frame p-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-900">
               <ReactMarkdown rehypePlugins={[rehypeRaw]} components={{
                 a: ({node, ...props}) => <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700" />
@@ -185,20 +184,20 @@ export function ChatInterface() {
   return (
     <div className="flex flex-col" style={{ height: '89vh' }}>
       <header className="flex items-center justify-center h-16 bg-gray-900 text-white">
-        <BotIcon className="animate-wave h-7 w-6 mr-2" />
+        <span className="text-2xl mr-2"></span>
         <h1 className="text-2xl font-bold">LeadGPT</h1>
       </header>
       <main className="flex flex-row justify-center items-start bg-gray-100 dark:bg-gray-900 p-4">
         <div className="flex flex-col w-1/2 h-full bg-white rounded-lg shadow-md p-4 mr-4 chat-messages" style={{maxHeight}}>
           <div className="flex items-center mb-4">
-            <BotIcon className="h-6 w-6 text-gray-500 mr-2" />
+            <span className="text-xl mr-2">💬</span>
             <h2 className="text-lg font-semibold">Chat Interface With The Customer</h2>
           </div>
           <div className={`flex-1 overflow-y-auto ${styles.hideScrollbar}`}>
             {messages.map(renderMessage)}
             {isBotTyping && (
               <div className="flex items-center justify-start">
-                <img alt="Bot" className="rounded-full mr-2" src="/maskot.png" style={{ width: 24, height: 24, objectFit: "cover" }} />
+                <span role="img" aria-label="Bot" className="mr-2">🌼</span>
                 <div className={styles.typingBubble}>
                   <span className={styles.typingDot}></span>
                   <span className={styles.typingDot}></span>
@@ -220,7 +219,7 @@ export function ChatInterface() {
         </div>
         <div className="flex flex-col w-1/2 h-full bg-white rounded-lg shadow-md p-4 thinking-process" style={{maxHeight}}>
           <div className="flex items-center mb-4">
-            <BotIcon className="h-6 w-6 text-gray-500 mr-2" />
+            <span className="text-xl mr-2">🧠</span>
             <h2 className="text-lg font-semibold">AI Lead Agent Thought Process</h2>
           </div>
           <div className={`flex-1 overflow-y-auto hide-scroll ${styles.hideScrollbar}`} style={{ overflowX: 'hidden' }}>
